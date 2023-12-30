@@ -1,41 +1,57 @@
-import sys
 import socket
 import threading
+from queue import Queue
 
-usage = "python3 portscanner.py TARGET START_PORT END_PORT"
-
-print("-"*70)
-print("Python Simple Port Scanner")
-print("-"*70)
-
-if(len(sys.argv) != 4):
-    print(usage)
-    sys.exit()
+def scan_port(target, port):
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.settimeout(1)
+    result = sock.connect_ex((target, port))
+    sock.close()
     
-try:
-    if(sys.argv[1][0].isdigit()):
-        target = sys.argv[1]
-    else:
-        target = socket.gethostbyname(sys.argv[1])
-except socket.gaierror:
-    print("Name resolution error")
-    sys.exit()
+    if result == 0:
+        print(f"Port {port} is OPEN")
 
-start_port = int(sys.argv[2])
-end_port = int(sys.argv[3])
+def worker(target, port_queue):
+    while True:
+        port = port_queue.get()
+        if port is None:
+            break
+        scan_port(target, port)
+        port_queue.task_done()
 
-print("Scanning target", target)
+def scan_ports(target, start_port, end_port, num_threads):
+    print(f"Scanning target {target} from port {start_port} to {end_port} using {num_threads} threads")
 
-def scan_port(port):
-   #print("scanning port:",port)
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.settimeout(2)
-    conn = s.connect_ex((target,port))
-    if(not conn):
-        print("port {} is OPEN".format(port))
-    s.close()
-    
+    port_queue = Queue()
 
-for port in range(start_port, end_port+1):
-    thread = threading.Thread(target=scan_port, args =(port,))
-    thread.start()
+    for port in range(start_port, end_port + 1):
+        port_queue.put(port)
+
+    threads = []
+    for _ in range(num_threads):
+        thread = threading.Thread(target=worker, args=(target, port_queue))
+        thread.start()
+        threads.append(thread)
+
+    port_queue.join()
+
+    for _ in range(num_threads):
+        port_queue.put(None)
+
+    for thread in threads:
+        thread.join()
+
+def main():
+    print("-" * 70)
+    print("Advanced Port Scanner")
+    print("-" * 70)
+
+    target = input("Enter the target (IP address or hostname): ").strip()
+    start_port = int(input("Enter the starting port: "))
+    end_port = int(input("Enter the ending port: "))
+    num_threads = int(input("Enter the number of threads: "))
+
+    scan_ports(target, start_port, end_port, num_threads)
+
+if __name__ == "__main__":
+    main()
